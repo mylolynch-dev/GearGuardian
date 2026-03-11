@@ -1,0 +1,6 @@
+# Host-side unit tests (no hardware required)
+# TODO (Phase 6): Add native_posix Zephyr test targets for:
+#   - motion_classifier logic
+#   - boot_metadata load/save/reset
+#   - state machine transition table
+#   - event payload sizing assertions

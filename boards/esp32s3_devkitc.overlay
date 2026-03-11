@@ -1,0 +1,163 @@
+/*
+ * boards/esp32s3_devkitc.overlay
+ * Gear Guardian hardware configuration for ESP32-S3 DevKitC-1
+ *
+ * This overlay adds and configures all peripheral nodes used by the project.
+ * Pin assignments marked "TODO: confirm wiring" should be verified against
+ * your physical wiring before flashing to hardware.
+ *
+ * ESP32-S3 GPIO bank notes:
+ *   GPIO pins 0–31  → &gpio0
+ *   GPIO pins 32–   → &gpio1 with index (pin - 32)
+ *   Example: GPIO38 → <&gpio1 6 ...>  (38 - 32 = 6)
+ *
+ * Zephyr board target: esp32s3_devkitc/esp32s3/procpu
+ *
+ * TODO items are prefixed with "TODO:" in comments throughout this file.
+ */
+
+/* ===========================================================================
+ * I2C0 — ICM-20948 IMU
+ *
+ * Default I2C0 pins on ESP32-S3 DevKitC-1 (check your Zephyr board file):
+ *   SDA = GPIO8
+ *   SCL = GPIO9
+ * TODO: confirm these match the i2c0 pinctrl in esp32s3_devkitc-pinctrl.dtsi
+ * =========================================================================== */
+&i2c0 {
+    status = "okay";
+    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+
+    /*
+     * ICM-20948 I2C device node.
+     *
+     * There is no upstream Zephyr binding for ICM-20948 as of Zephyr 3.6.
+     * We use the generic "vnd,i2c-device" compatible for address reservation.
+     * The driver accesses the bus directly via the parent i2c0 device reference
+     * obtained through DT_NODELABEL(i2c0) in icm20948.c.
+     *
+     * TODO: once an upstream binding exists, update compatible string.
+     */
+    icm20948_dev: icm20948@69 {
+        compatible = "vnd,i2c-device";
+        reg = <0x69>;
+        label = "ICM20948";
+        status = "okay";
+    };
+};
+
+/* ===========================================================================
+ * SPI2 — SSD1306 OLED display (DISABLED until hardware is connected)
+ *
+ * TODO (Phase 2): uncomment when OLED is wired. Also re-enable in prj.conf:
+ *   CONFIG_DISPLAY=y
+ *   CONFIG_SSD1306=y
+ *
+ * Pins (confirm before enabling):
+ *   MOSI=GPIO11  SCLK=GPIO12  CS=GPIO10  DC=GPIO13  RST=GPIO14
+ *
+ * NOTE: verify compatible string — may be "solomon,ssd1306" (no "fb") in
+ *       your Zephyr version. Run: grep -r ssd1306 $ZEPHYR_BASE/dts/bindings/
+ * =========================================================================== */
+/* &spi2 { ... } — deferred until Phase 2 hardware bring-up */
+
+/* ===========================================================================
+ * SPI3 — microSD card (DISABLED until hardware is connected)
+ *
+ * TODO (Phase 2): uncomment when SD module is wired. Also re-enable in prj.conf:
+ *   CONFIG_DISK_DRIVER_SDMMC=y  (or CONFIG_DISK_DRIVER_SDMMC_SPI=y)
+ *
+ * Pins (confirm before enabling):
+ *   MOSI=GPIO35  MISO=GPIO37  SCLK=GPIO36  CS=GPIO38 (gpio1 pin 6)
+ *
+ * NOTE: cs-gpios belongs on the SPI controller node, not the child device,
+ *       in Zephyr 4.x. Re-verify binding before enabling.
+ * =========================================================================== */
+/* &spi3 { ... } — deferred until Phase 2 hardware bring-up */
+
+/* ===========================================================================
+ * GPIO inputs and outputs
+ *
+ * The aliases section maps short names to DT nodes.  Driver code accesses
+ * hardware via DT_ALIAS() so only the overlay needs updating when wiring
+ * changes.
+ * =========================================================================== */
+/ {
+    aliases {
+        reed-switch = &reed_switch_node;
+        mode-btn    = &mode_button_node;
+        buzzer      = &buzzer_node;
+        led0        = &status_led_node;
+    };
+
+    /*
+     * GPIO inputs — represented as gpio-keys nodes so Zephyr's gpio_dt_spec
+     * API (gpio_pin_configure_dt, gpio_add_callback) works cleanly.
+     */
+    gpio_inputs {
+        compatible = "gpio-keys";
+
+        reed_switch_node: reed_switch {
+            /*
+             * Magnetic reed switch, wired normally-closed.
+             * Active LOW: reads 0 when magnet is present (bag sealed).
+             * Pull-up keeps pin HIGH when switch is open (bag opened).
+             * TODO: confirm GPIO4 matches your wiring.
+             */
+            gpios = <&gpio0 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "REED_SWITCH";
+        };
+
+        mode_button_node: mode_button {
+            /*
+             * GPIO0 = the BOOT button on the ESP32-S3 DevKitC-1 PCB.
+             * Convenient dual-use: boot button for flashing + mode select.
+             * Hold during power-on to enter DIAGNOSTIC MODE.
+             * TODO: wire an external button if GPIO0 conflicts with other use.
+             */
+            gpios = <&gpio0 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "MODE_BUTTON";
+        };
+    };
+
+    /*
+     * GPIO outputs — represented as gpio-leds nodes (Zephyr convention for
+     * simple GPIO outputs; works with gpio_dt_spec for buzzer too).
+     */
+    gpio_outputs {
+        compatible = "gpio-leds";
+
+        buzzer_node: buzzer {
+            /*
+             * Active buzzer: drive HIGH to sound, LOW to silence.
+             * TODO: confirm GPIO5 and verify 3.3V GPIO can drive your buzzer
+             * module directly, or add a transistor driver stage.
+             */
+            gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
+            label = "BUZZER";
+        };
+
+        status_led_node: led0 {
+            /*
+             * Onboard RGB LED on the DevKitC-1 is on GPIO48.
+             * GPIO48 = gpio1 pin 16 (48-32=16).
+             * Blue channel used as status indicator.
+             * TODO: confirm GPIO48 is the correct RGB LED pin for your board
+             *       revision.  Some revisions use a different pin.
+             */
+            gpios = <&gpio1 16 GPIO_ACTIVE_HIGH>;
+            label = "STATUS_LED";
+        };
+    };
+};
+
+/* ===========================================================================
+ * Flash partitions — no overlay needed
+ *
+ * The ESP32-S3 DevKitC board DTS already defines all required partitions
+ * including boot_partition, slot0_partition, and storage_partition.
+ * NVS (boot_metadata.c) will use the existing storage_partition label.
+ *
+ * TODO: after a successful build, inspect build/zephyr/zephyr.dts to confirm
+ *       the storage_partition address and size are suitable for NVS.
+ * =========================================================================== */

@@ -1,0 +1,7 @@
+# On-target integration tests (hardware required)
+# TODO (Phase 6): Add Zephyr test shell scripts or test runner scripts for:
+#   - ICM-20948 WHO_AM_I verification
+#   - Reed switch ISR and debounce
+#   - Full alarm cycle (DISARMED → ARMED → ALARM → COOLDOWN → DISARMED)
+#   - Boot metadata NVS persistence across 20 power cycles
+#   - Diagnostic mode test sequence pass/fail
