@@ -47,33 +47,63 @@
 };
 
 /* ===========================================================================
- * SPI2 — SSD1306 OLED display (DISABLED until hardware is connected)
+ * SPI2 — SSD1306 OLED display
  *
- * TODO (Phase 2): uncomment when OLED is wired. Also re-enable in prj.conf:
- *   CONFIG_DISPLAY=y
- *   CONFIG_SSD1306=y
- *
- * Pins (confirm before enabling):
- *   MOSI=GPIO11  SCLK=GPIO12  CS=GPIO10  DC=GPIO13  RST=GPIO14
- *
- * NOTE: verify compatible string — may be "solomon,ssd1306" (no "fb") in
- *       your Zephyr version. Run: grep -r ssd1306 $ZEPHYR_BASE/dts/bindings/
+ * Pins: MOSI=GPIO11  SCLK=GPIO12  CS=GPIO10  DC=GPIO13  RST=GPIO14
  * =========================================================================== */
-/* &spi2 { ... } — deferred until Phase 2 hardware bring-up */
+&spi2 {
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    /* CS is owned by the SPI controller in Zephyr 4.x */
+    cs-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+
+    ssd1306_dev: ssd1306@0 {
+        compatible = "solomon,ssd1306fb";
+        reg = <0>;
+        spi-max-frequency = <4000000>;
+
+        width = <128>;
+        height = <64>;
+        segment-offset = <0>;
+        page-offset = <0>;
+        display-offset = <0>;
+        multiplex-ratio = <63>;   /* height - 1 */
+        segment-remap;
+        com-invdir;
+        prechargep = <0x22>;
+
+        dc-gpios    = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+        reset-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+    };
+};
 
 /* ===========================================================================
- * SPI3 — microSD card (DISABLED until hardware is connected)
+ * SPI3 — microSD card
  *
- * TODO (Phase 2): uncomment when SD module is wired. Also re-enable in prj.conf:
- *   CONFIG_DISK_DRIVER_SDMMC=y  (or CONFIG_DISK_DRIVER_SDMMC_SPI=y)
- *
- * Pins (confirm before enabling):
- *   MOSI=GPIO35  MISO=GPIO37  SCLK=GPIO36  CS=GPIO38 (gpio1 pin 6)
- *
- * NOTE: cs-gpios belongs on the SPI controller node, not the child device,
- *       in Zephyr 4.x. Re-verify binding before enabling.
+ * Pins: MOSI=GPIO35  MISO=GPIO37  SCLK=GPIO36  CS=GPIO38 (gpio1 pin 6)
+ * Format card as FAT32 before first use.
  * =========================================================================== */
-/* &spi3 { ... } — deferred until Phase 2 hardware bring-up */
+&spi3 {
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    /* CS is owned by the SPI controller in Zephyr 4.x */
+    cs-gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;   /* GPIO38 = gpio1 pin 6 */
+
+    sdhc0: sdhc@0 {
+        compatible = "zephyr,sdhc-spi-slot";
+        reg = <0>;
+        spi-max-frequency = <24000000>;
+
+        mmc {
+            compatible = "zephyr,sdmmc-disk";
+            status = "okay";
+        };
+    };
+};
 
 /* ===========================================================================
  * GPIO inputs and outputs
